@@ -63,6 +63,11 @@ function initDb() {
       created_at    TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS app_sessions (
+      token      TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_price_cache_date ON price_cache(date);
     CREATE INDEX IF NOT EXISTS idx_sessions_date ON charging_sessions(date);
   `);

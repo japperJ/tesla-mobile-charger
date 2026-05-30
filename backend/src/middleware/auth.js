@@ -1,14 +1,13 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { authenticator } = require('otplib');
+const { generateSecret, generateURI, verify: verifyOtp } = require('otplib');
 const QRCode = require('qrcode');
 const { getDb } = require('../db/database');
 
 const TOKEN_COOKIE = 'app_token';
 const APP_NAME = 'Tesla Charger';
 
-// ─── Session token store (in-memory) ────────────────────────────────────────
-const validTokens = new Map();
+// ─── Session token store (SQLite — survives restarts) ───────────────────────
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // Temporary MFA tokens (issued after password OK, before TOTP verified)
@@ -17,20 +16,24 @@ const MFA_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function issueToken() {
   const token = crypto.randomBytes(32).toString('hex');
-  validTokens.set(token, Date.now() + TOKEN_TTL_MS);
+  const expiresAt = Date.now() + TOKEN_TTL_MS;
+  getDb().prepare('INSERT INTO app_sessions (token, expires_at) VALUES (?, ?)').run(token, expiresAt);
   return token;
 }
 
 function isValidToken(token) {
   if (!token) return false;
-  const expiry = validTokens.get(token);
-  if (!expiry) return false;
-  if (Date.now() > expiry) { validTokens.delete(token); return false; }
+  const row = getDb().prepare('SELECT expires_at FROM app_sessions WHERE token = ?').get(token);
+  if (!row) return false;
+  if (Date.now() > row.expires_at) {
+    getDb().prepare('DELETE FROM app_sessions WHERE token = ?').run(token);
+    return false;
+  }
   return true;
 }
 
 function revokeAllTokens() {
-  validTokens.clear();
+  getDb().prepare('DELETE FROM app_sessions').run();
 }
 
 function issueMfaToken(userId) {
@@ -82,8 +85,8 @@ async function changePassword(userId, newPassword) {
 
 // ─── TOTP helpers ─────────────────────────────────────────────────────────────
 function generateTotpSecret(username) {
-  const secret = authenticator.generateSecret();
-  const otpauth = authenticator.keyuri(username, APP_NAME, secret);
+  const secret = generateSecret();
+  const otpauth = generateURI({ strategy: 'totp', issuer: APP_NAME, label: username, secret });
   return { secret, otpauth };
 }
 
@@ -92,7 +95,7 @@ async function generateTotpQr(otpauth) {
 }
 
 function verifyTotpCode(secret, code) {
-  return authenticator.verify({ token: code, secret });
+  return verifyOtp({ token: code, secret });
 }
 
 function enableTotp(userId, secret) {
