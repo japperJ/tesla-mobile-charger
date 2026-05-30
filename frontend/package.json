@@ -1,0 +1,33 @@
+{
+  "name": "tesla-charger-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tesla Charger Scheduler Mobile App",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "cap:add:ios": "npx cap add ios",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:run:ios": "npx cap run ios",
+    "cap:run:android": "npx cap run android"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.2",
+    "axios": "^1.6.7",
+    "chart.js": "^4.4.1",
+    "react": "^19.2.6",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.16.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.4",
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.14"
+  }
+}

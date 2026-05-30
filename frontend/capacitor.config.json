@@ -1,0 +1,14 @@
+{
+  "appId": "com.teslacharger.app",
+  "appName": "Tesla Charger",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#0a0a0a"
+    }
+  }
+}

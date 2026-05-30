@@ -1,0 +1,124 @@
+.setup-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: calc(var(--safe-top) + 48px) 24px calc(var(--safe-bottom) + 32px);
+  justify-content: center;
+  gap: 32px;
+}
+
+.setup-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.setup-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.tesla-logo {
+  width: 120px;
+  color: var(--accent);
+}
+
+.setup-title {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.setup-steps-indicator {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.3s;
+}
+
+.step-dot.done {
+  background: var(--success, #22c55e);
+}
+
+.step-dot.active {
+  background: var(--accent);
+  width: 24px;
+  border-radius: 4px;
+}
+
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup-step-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.setup-step-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.setup-info {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.setup-info:last-child {
+  margin-bottom: 0;
+}
+
+.setup-info strong {
+  color: var(--text);
+}
+
+.setup-redirect-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+.setup-redirect-code {
+  display: block;
+  font-size: 12px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+  word-break: break-all;
+  margin-top: 8px;
+  color: var(--accent);
+}
+
+.setup-link {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.setup-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  opacity: 0.7;
+}
+

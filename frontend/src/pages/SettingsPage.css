@@ -1,0 +1,134 @@
+.day-selector {
+  display: flex;
+  gap: 6px;
+}
+
+.day-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.day-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-elevated);
+  outline: none;
+  accent-color: var(--accent);
+  touch-action: pan-y;
+}
+
+.form-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.slider-value {
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 44px;
+  text-align: right;
+}
+
+.toggle-row {
+  display: flex;
+}
+
+.toggle-btn {
+  padding: 8px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.toggle-btn.active {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.mode-toggle {
+  padding: 5px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-toggle.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.adv-day-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: opacity 0.15s;
+}
+
+.adv-day-row.inactive {
+  opacity: 0.45;
+}
+
+.adv-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.adv-day-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.adv-day-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adv-field-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
