@@ -18,12 +18,19 @@ export default function App() {
 
   useEffect(() => {
     api.get('/auth/status')
-      .then(() => setAppAuthed(true))
+      .then(res => {
+        if (res.data?.code === 'SETUP_REQUIRED') {
+          setNeedsSetup(true);
+          setAppAuthed(false);
+        } else {
+          setAppAuthed(true);
+        }
+      })
       .catch(err => {
         const data = err.response?.data;
         if (data?.code === 'SETUP_REQUIRED') { setNeedsSetup(true); setAppAuthed(false); }
         else if (err.response?.status === 401) setAppAuthed(false);
-        else setAppAuthed(true); // network error / dev mode — let through
+        else setAppAuthed(true);
       });
 
     const id = api.interceptors.response.use(
