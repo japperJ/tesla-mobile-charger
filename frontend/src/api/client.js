@@ -4,8 +4,14 @@ const BASE = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({ baseURL: BASE, withCredentials: true });
 
-export const appLogin = (secret) => api.post('/auth/app-login', { secret }).then(r => r.data);
-export const appLogout = () => api.post('/auth/app-logout').then(r => r.data);
+export const appLogin = (username, password) => api.post('/auth/login', { username, password }).then(r => r.data);
+export const appMfaVerify = (mfaToken, code) => api.post('/auth/mfa/verify', { mfaToken, code }).then(r => r.data);
+export const appLogout = () => api.post('/auth/logout').then(r => r.data);
+export const appSetup = (username, password) => api.post('/auth/setup', { username, password }).then(r => r.data);
+export const getMfaSetup = () => api.get('/auth/mfa/setup').then(r => r.data);
+export const enableMfa = (code) => api.post('/auth/mfa/enable', { code }).then(r => r.data);
+export const disableMfa = (code) => api.post('/auth/mfa/disable', { code }).then(r => r.data);
+export const changePassword = (currentPassword, newPassword) => api.post('/auth/change-password', { currentPassword, newPassword }).then(r => r.data);
 
 export const getAuthStatus = () => api.get('/auth/status').then(r => r.data);
 export const saveCredentials = (email, password) => api.post('/auth/credentials', { email, password }).then(r => r.data);

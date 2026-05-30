@@ -14,35 +14,87 @@ const { calculateOptimalWindow, getTodaySchedule, getSessionHistory } = require(
 const { getConfig, updateConfig, getConfigValue } = require('../db/config');
 const { notify } = require('../notifications/ntfy');
 const { broadcastUpdate, setLastScheduledSoc, broadcastNow } = require('../websocket');
-const { requireAppAuth, issueToken, revokeAllTokens, TOKEN_COOKIE, APP_SECRET } = require('../middleware/auth');
+const {
+  requireAppAuth, issueToken, revokeAllTokens, TOKEN_COOKIE,
+  issueMfaToken, consumeMfaToken,
+  hasAnyUser, createUser, verifyPassword, changePassword,
+  generateTotpSecret, generateTotpQr, verifyTotpCode, enableTotp, disableTotp,
+  getUserById,
+} = require('../middleware/auth');
 
 // In-memory PKCE state store (single-user app — one pending auth at a time)
 let pendingAuth = null; // { state, codeVerifier, createdAt }
 
-// ─── App login (PIN/secret check) ────────────────────────────────────
-// POST /api/auth/app-login  { secret }
-// Returns a session cookie. Exempt from requireAppAuth.
-router.post('/auth/app-login', (req, res) => {
-  if (!APP_SECRET) {
-    // Dev mode: no secret configured — auto-grant
-    return res.json({ ok: true, dev: true });
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'Strict',
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+};
+
+// ─── First-time account setup ─────────────────────────────────────────
+// POST /api/auth/setup { username, password }
+// Only works if no users exist yet.
+router.post('/auth/setup', async (req, res) => {
+  if (hasAnyUser()) return res.status(400).json({ error: 'Account already exists' });
+  const { username, password } = req.body;
+  if (!username || !password || password.length < 6) {
+    return res.status(400).json({ error: 'Username and password (min 6 chars) required' });
   }
-  const { secret } = req.body;
-  if (!secret || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(APP_SECRET))) {
-    return res.status(401).json({ error: 'Invalid secret' });
+  try {
+    await createUser(username.trim(), password);
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.message?.includes('UNIQUE')) return res.status(400).json({ error: 'Username already taken' });
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// ─── Auth status ──────────────────────────────────────────────────────
+// GET /api/auth/status  — returns setup_required, ok, or 401
+router.get('/auth/status', requireAppAuth, (req, res) => {
+  if (!hasAnyUser()) return res.json({ status: 'setup_required', code: 'SETUP_REQUIRED' });
+  res.json({ status: 'ok' });
+});
+
+// ─── Login: step 1 — username + password ─────────────────────────────
+// POST /api/auth/login  { username, password }
+router.post('/auth/login', async (req, res) => {
+  if (!hasAnyUser()) return res.status(400).json({ error: 'No account set up', code: 'SETUP_REQUIRED' });
+  const { username, password } = req.body;
+  const user = await verifyPassword(username, password);
+  if (!user) {
+    await new Promise(r => setTimeout(r, 500)); // slow down brute force
+    return res.status(401).json({ error: 'Invalid username or password' });
+  }
+  if (user.totp_enabled) {
+    const mfaToken = issueMfaToken(user.id);
+    return res.json({ ok: true, mfaRequired: true, mfaToken });
+  }
+  // No MFA — issue full session
+  const token = issueToken();
+  res.cookie(TOKEN_COOKIE, token, COOKIE_OPTS);
+  res.json({ ok: true, mfaRequired: false });
+});
+
+// ─── Login: step 2 — TOTP verification ───────────────────────────────
+// POST /api/auth/mfa/verify  { mfaToken, code }
+router.post('/auth/mfa/verify', (req, res) => {
+  const { mfaToken, code } = req.body;
+  const userId = consumeMfaToken(mfaToken);
+  if (!userId) return res.status(401).json({ error: 'MFA session expired. Please log in again.' });
+  const user = getUserById(userId);
+  if (!user || !user.totp_secret) return res.status(401).json({ error: 'MFA not configured' });
+  if (!verifyTotpCode(user.totp_secret, (code || '').replace(/\s/g, ''))) {
+    return res.status(401).json({ error: 'Incorrect code. Try again.' });
   }
   const token = issueToken();
-  res.cookie(TOKEN_COOKIE, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'Strict',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  });
+  res.cookie(TOKEN_COOKIE, token, COOKIE_OPTS);
   res.json({ ok: true });
 });
 
 // ─── App logout ───────────────────────────────────────────────────────
-router.post('/auth/app-logout', requireAppAuth, (req, res) => {
+router.post('/auth/logout', requireAppAuth, (req, res) => {
   revokeAllTokens();
   res.clearCookie(TOKEN_COOKIE);
   res.json({ ok: true });
@@ -50,6 +102,64 @@ router.post('/auth/app-logout', requireAppAuth, (req, res) => {
 
 // ─── Apply app auth to ALL routes below this line ────────────────────
 router.use(requireAppAuth);
+
+// ─── TOTP setup (protected — user must be logged in) ─────────────────
+// GET /api/auth/mfa/setup  → returns QR code data URL + secret
+router.get('/auth/mfa/setup', async (req, res) => {
+  // Single-user app: get first (only) user
+  const user = getUserById(1);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const { secret, otpauth } = generateTotpSecret(user.username);
+  const qr = await generateTotpQr(otpauth);
+  // Store pending secret in memory (confirmed when /mfa/enable is called)
+  req._pendingTotpSecret = secret;
+  res.json({ secret, qr });
+  // Stash secret for next enable call — use in-process cache keyed by user id
+  global._pendingTotp = global._pendingTotp || {};
+  global._pendingTotp[user.id] = { secret, expiry: Date.now() + 10 * 60 * 1000 };
+});
+
+// POST /api/auth/mfa/enable  { code }  → verify code then save secret
+router.post('/auth/mfa/enable', (req, res) => {
+  const user = getUserById(1);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const pending = (global._pendingTotp || {})[user.id];
+  if (!pending || Date.now() > pending.expiry) {
+    return res.status(400).json({ error: 'Setup session expired. Start again.' });
+  }
+  const code = (req.body.code || '').replace(/\s/g, '');
+  if (!verifyTotpCode(pending.secret, code)) {
+    return res.status(401).json({ error: 'Incorrect code. Open your authenticator app and try again.' });
+  }
+  enableTotp(user.id, pending.secret);
+  delete global._pendingTotp[user.id];
+  res.json({ ok: true });
+});
+
+// POST /api/auth/mfa/disable  { code }  → verify current code then disable
+router.post('/auth/mfa/disable', (req, res) => {
+  const user = getUserById(1);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!user.totp_enabled) return res.json({ ok: true, already: true });
+  const code = (req.body.code || '').replace(/\s/g, '');
+  if (!verifyTotpCode(user.totp_secret, code)) {
+    return res.status(401).json({ error: 'Incorrect code' });
+  }
+  disableTotp(user.id);
+  res.json({ ok: true });
+});
+
+// POST /api/auth/change-password  { currentPassword, newPassword }
+router.post('/auth/change-password', async (req, res) => {
+  const user = getUserById(1);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const { currentPassword, newPassword } = req.body;
+  const verified = await verifyPassword(user.username, currentPassword);
+  if (!verified) return res.status(401).json({ error: 'Current password is incorrect' });
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  await changePassword(user.id, newPassword);
+  res.json({ ok: true });
+});
 
 // ─── Tesla credentials check middleware ──────────────────────────────
 function requireCreds(req, res, next) {

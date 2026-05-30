@@ -14,17 +14,18 @@ import './styles/global.css';
 
 export default function App() {
   const [appAuthed, setAppAuthed] = useState(null); // null=checking, true=ok, false=need login
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   useEffect(() => {
-    // Probe a lightweight endpoint to see if our session cookie is valid
     api.get('/auth/status')
       .then(() => setAppAuthed(true))
       .catch(err => {
-        if (err.response?.status === 401) setAppAuthed(false);
-        else setAppAuthed(true); // network error or dev mode — let through
+        const data = err.response?.data;
+        if (data?.code === 'SETUP_REQUIRED') { setNeedsSetup(true); setAppAuthed(false); }
+        else if (err.response?.status === 401) setAppAuthed(false);
+        else setAppAuthed(true); // network error / dev mode — let through
       });
 
-    // Global 401 interceptor — any subsequent 401 drops back to login
     const id = api.interceptors.response.use(
       r => r,
       err => {
@@ -46,7 +47,7 @@ export default function App() {
   }
 
   if (appAuthed === false) {
-    return <LoginPage onLogin={() => setAppAuthed(true)} />;
+    return <LoginPage onLogin={() => { setAppAuthed(true); setNeedsSetup(false); }} needsSetup={needsSetup} />;
   }
 
   return (
