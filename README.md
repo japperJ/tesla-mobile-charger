@@ -176,11 +176,21 @@ Distribute the built APK (Android) or IPA (iOS) directly.
 
 ## Security
 
-- Login requires **username + password** (bcrypt hashed in SQLite)
+- Login requires **username + password** (bcrypt hashed, cost 12, in SQLite)
 - Optional **TOTP MFA** via any authenticator app (Google Authenticator, Authy, etc.)
+- **Brute-force protection** — `/auth/login`, `/auth/setup`, and `/auth/mfa/verify` are rate-limited to 10 attempts / 15 min per IP
+- **Security headers** — HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` on all responses
 - Session tokens stored in SQLite — survive restarts, expire after 30 days
+- Backend (port 4002) is bound to `127.0.0.1` only — reachable solely through the nginx reverse proxy
 - Tesla credentials stored **AES-256 encrypted**
+- All parameterized SQL (no injection), `SameSite=Strict` + `HttpOnly` + `Secure` cookies
 - All data stays on your server — no cloud except Tesla + ntfy.sh
+
+### Residual notes (acceptable for a single-user app)
+
+- The rate-limit bucket may key on the Cloudflare edge IP, so in the worst case a sustained attack could briefly rate-limit you too (DoS, not breach) — resets every 15 minutes.
+- The first-time setup endpoint remains open only if the database is ever wiped (no users exist).
+- **Want a second wall?** Putting [Cloudflare Zero Trust / Access](https://developers.cloudflare.com/cloudflare-one/applications/) in front of the app makes it effectively unreachable without your Cloudflare identity.
 
 ---
 
