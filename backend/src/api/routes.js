@@ -1,6 +1,19 @@
 const express = require('express');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
+
+// Brute-force protection for unauthenticated auth endpoints.
+// Keyed by client IP (Express 'trust proxy' is set to 1 in index.js).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,                  // 10 attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Try again later.', code: 'RATE_LIMITED' },
+  // We control the proxy chain (Cloudflare → nginx → backend); skip the strict check.
+  validate: { trustProxy: false },
+});
 const { hasCredentials, saveTokens } = require('../tesla/credentials');
 const {
   generateCodeVerifier, generateCodeChallenge, buildAuthUrl,
@@ -40,11 +53,11 @@ function cookieOpts(req) {
 // ─── First-time account setup ─────────────────────────────────────────
 // POST /api/auth/setup { username, password }
 // Only works if no users exist yet.
-router.post('/auth/setup', async (req, res) => {
+router.post('/auth/setup', authLimiter, async (req, res) => {
   if (hasAnyUser()) return res.status(400).json({ error: 'Account already exists' });
   const { username, password } = req.body;
-  if (!username || !password || password.length < 6) {
-    return res.status(400).json({ error: 'Username and password (min 6 chars) required' });
+  if (!username || !password || password.length < 10) {
+    return res.status(400).json({ error: 'Username and password (min 10 chars) required' });
   }
   try {
     await createUser(username.trim(), password);
@@ -64,7 +77,7 @@ router.get('/auth/status', requireAppAuth, (req, res) => {
 
 // ─── Login: step 1 — username + password ─────────────────────────────
 // POST /api/auth/login  { username, password }
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', authLimiter, async (req, res) => {
   if (!hasAnyUser()) return res.status(400).json({ error: 'No account set up', code: 'SETUP_REQUIRED' });
   const { username, password } = req.body;
   const user = await verifyPassword(username, password);
@@ -84,7 +97,7 @@ router.post('/auth/login', async (req, res) => {
 
 // ─── Login: step 2 — TOTP verification ───────────────────────────────
 // POST /api/auth/mfa/verify  { mfaToken, code }
-router.post('/auth/mfa/verify', (req, res) => {
+router.post('/auth/mfa/verify', authLimiter, (req, res) => {
   const { mfaToken, code } = req.body;
   const userId = consumeMfaToken(mfaToken);
   if (!userId) return res.status(401).json({ error: 'MFA session expired. Please log in again.' });
@@ -161,7 +174,7 @@ router.post('/auth/change-password', async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const verified = await verifyPassword(user.username, currentPassword);
   if (!verified) return res.status(401).json({ error: 'Current password is incorrect' });
-  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  if (!newPassword || newPassword.length < 10) return res.status(400).json({ error: 'New password must be at least 10 characters' });
   await changePassword(user.id, newPassword);
   res.json({ ok: true });
 });
