@@ -31,6 +31,8 @@ A self-hosted, mobile-first Tesla charging scheduler that automatically charges 
 | ⚙️ | **Settings** | Departure time, target SOC, charger kW, active weekdays, ntfy topic |
 | 🔄 | **Optimistic UI** | All controls show a pulsing dot while Tesla confirms — no spinner blocking |
 | 📱 | **Mobile App** | Capacitor build for iOS + Android |
+| 🔐 | **Secure Login** | Username + password + TOTP MFA (Google Authenticator) — no shared secret strings |
+| 🌐 | **Cloudflare Ready** | WSS support, correct cookie flags — works behind Cloudflare reverse proxy |
 
 ---
 
@@ -44,6 +46,7 @@ A self-hosted, mobile-first Tesla charging scheduler that automatically charges 
 | Tesla API | Unofficial Owner API via VCP proxy (EC key auth) |
 | Scheduling | node-cron |
 | Notifications | ntfy.sh |
+| Auth | bcryptjs + otplib (TOTP MFA) |
 | Deployment | Docker + docker-compose |
 
 ---
@@ -77,7 +80,6 @@ cp .env.example backend/.env
 # Edit backend/.env:
 #   TESLA_ENCRYPTION_KEY  — random 32-char string (required)
 #   NTFY_TOPIC            — your ntfy.sh topic (recommended)
-#   API_SECRET            — random long string for app auth
 #   CORS_ORIGIN           — URL where you serve the frontend
 ```
 
@@ -93,9 +95,18 @@ docker-compose up -d
 | App (frontend) | http://localhost:4001 |
 | API (backend) | http://localhost:4002 |
 
-### 3. Connect your Tesla
+### 3. Create your account
 
-Open the app → Settings → enter your Tesla email + password → Save.  
+Open the app → you will be prompted to **create an account** (username + password) on first launch.
+
+### 4. Set up MFA (recommended)
+
+Settings → Security → **Set up authenticator app** → scan the QR code with Google Authenticator.  
+After this, every login requires your 6-digit TOTP code.
+
+### 5. Connect your Tesla
+
+Settings → enter your Tesla email + password → Save.  
 Credentials are AES-encrypted before being stored in SQLite.
 
 ---
@@ -144,11 +155,12 @@ Distribute the built APK (Android) or IPA (iOS) directly.
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `TESLA_ENCRYPTION_KEY` | AES key for stored credentials (32+ chars) | ✅ |
-| `API_SECRET` | Long random string for backend auth | ✅ |
 | `NTFY_TOPIC` | ntfy.sh topic for push notifications | Recommended |
 | `NTFY_SERVER` | ntfy server URL (default: `https://ntfy.sh`) | No |
 | `PORT` | Backend port (default: `4002`) | No |
 | `CORS_ORIGIN` | Allowed frontend origin | No |
+
+> **Note:** `API_SECRET` is no longer used. Authentication is now handled via username + password + TOTP stored in SQLite.
 
 ---
 
@@ -157,6 +169,18 @@ Distribute the built APK (Android) or IPA (iOS) directly.
 - **No accidental commands** — Charge limit, charging speed, and climate controls all require a deliberate tap-to-open sheet + Confirm button before any command is sent to Tesla.
 - **Optimistic UI** — Controls respond instantly with a pulsing `●` indicator. The dot clears when Tesla's WebSocket confirms the change (or after 15 s timeout).
 - **Charger-aware amps ceiling** — The charging speed slider maximum is set from `chargeCurrentRequestMax` reported by Tesla (the negotiated EVSE limit), not a hardcoded value.
+- **No shared secrets** — Authentication uses proper username + bcrypt password + TOTP MFA instead of a shared API key. Session tokens survive backend restarts (stored in SQLite).
+- **Cloudflare-compatible** — WebSocket uses `wss://` when the page is served over HTTPS. Cookies use the `Secure` flag only when appropriate. Works seamlessly behind Cloudflare with zero config.
+
+---
+
+## Security
+
+- Login requires **username + password** (bcrypt hashed in SQLite)
+- Optional **TOTP MFA** via any authenticator app (Google Authenticator, Authy, etc.)
+- Session tokens stored in SQLite — survive restarts, expire after 30 days
+- Tesla credentials stored **AES-256 encrypted**
+- All data stays on your server — no cloud except Tesla + ntfy.sh
 
 ---
 
