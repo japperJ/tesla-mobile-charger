@@ -2,7 +2,10 @@ import axios from 'axios';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
-const api = axios.create({ baseURL: BASE });
+const api = axios.create({ baseURL: BASE, withCredentials: true });
+
+export const appLogin = (secret) => api.post('/auth/app-login', { secret }).then(r => r.data);
+export const appLogout = () => api.post('/auth/app-logout').then(r => r.data);
 
 export const getAuthStatus = () => api.get('/auth/status').then(r => r.data);
 export const saveCredentials = (email, password) => api.post('/auth/credentials', { email, password }).then(r => r.data);

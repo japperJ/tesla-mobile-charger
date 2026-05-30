@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const http = require('http');
 const { initDb } = require('./db/database');
 const { setupWebSocket } = require('./websocket');
@@ -9,8 +10,16 @@ const routes = require('./api/routes');
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+const corsOrigin = process.env.CORS_ORIGIN;
+if (!corsOrigin) {
+  console.warn('⚠️  WARNING: CORS_ORIGIN is not set — defaulting to same-origin only.');
+}
+app.use(cors({
+  origin: corsOrigin || false,
+  credentials: true,
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Initialize database (must be before routes that read config)
 initDb();

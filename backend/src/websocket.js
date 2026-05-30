@@ -1,9 +1,11 @@
 const WebSocket = require('ws');
+const { parse: parseCookie } = require('cookie');
 const { getStatus } = require('./tesla/client');
 const { hasCredentials } = require('./tesla/credentials');
 const { getConfig } = require('./db/config');
 const { toDepartureInfo } = require('./charging/schedule-mode');
 const { getTodaySchedule, calculateOptimalWindow } = require('./charging/optimizer');
+const { isValidWsToken, TOKEN_COOKIE } = require('./middleware/auth');
 
 let wss;
 const clients = new Set();
@@ -11,7 +13,20 @@ let statusInterval;
 let lastScheduledSoc = null; // track SOC used for last schedule calculation
 
 function setupWebSocket(server) {
-  wss = new WebSocket.Server({ server, path: '/ws' });
+  wss = new WebSocket.Server({
+    server,
+    path: '/ws',
+    verifyClient: ({ req }, cb) => {
+      // Extract token from cookie header
+      const cookies = parseCookie(req.headers['cookie'] || '');
+      const token = cookies[TOKEN_COOKIE];
+      if (isValidWsToken(token)) {
+        cb(true);
+      } else {
+        cb(false, 401, 'Unauthorized');
+      }
+    },
+  });
 
   wss.on('connection', (ws) => {
     clients.add(ws);

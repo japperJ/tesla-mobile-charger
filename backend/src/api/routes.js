@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { hasCredentials, saveTokens } = require('../tesla/credentials');
 const {
@@ -13,11 +14,44 @@ const { calculateOptimalWindow, getTodaySchedule, getSessionHistory } = require(
 const { getConfig, updateConfig, getConfigValue } = require('../db/config');
 const { notify } = require('../notifications/ntfy');
 const { broadcastUpdate, setLastScheduledSoc, broadcastNow } = require('../websocket');
+const { requireAppAuth, issueToken, revokeAllTokens, TOKEN_COOKIE, APP_SECRET } = require('../middleware/auth');
 
 // In-memory PKCE state store (single-user app — one pending auth at a time)
 let pendingAuth = null; // { state, codeVerifier, createdAt }
 
-// ─── Auth check middleware ───────────────────────────────────────────
+// ─── App login (PIN/secret check) ────────────────────────────────────
+// POST /api/auth/app-login  { secret }
+// Returns a session cookie. Exempt from requireAppAuth.
+router.post('/auth/app-login', (req, res) => {
+  if (!APP_SECRET) {
+    // Dev mode: no secret configured — auto-grant
+    return res.json({ ok: true, dev: true });
+  }
+  const { secret } = req.body;
+  if (!secret || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(APP_SECRET))) {
+    return res.status(401).json({ error: 'Invalid secret' });
+  }
+  const token = issueToken();
+  res.cookie(TOKEN_COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Strict',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  });
+  res.json({ ok: true });
+});
+
+// ─── App logout ───────────────────────────────────────────────────────
+router.post('/auth/app-logout', requireAppAuth, (req, res) => {
+  revokeAllTokens();
+  res.clearCookie(TOKEN_COOKIE);
+  res.json({ ok: true });
+});
+
+// ─── Apply app auth to ALL routes below this line ────────────────────
+router.use(requireAppAuth);
+
+// ─── Tesla credentials check middleware ──────────────────────────────
 function requireCreds(req, res, next) {
   if (!hasCredentials()) {
     return res.status(401).json({ error: 'Tesla not authenticated. Complete setup first.' });
@@ -58,7 +92,7 @@ router.get('/auth/start', (req, res) => {
   try {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
-    const state = Math.random().toString(36).slice(2);
+    const state = crypto.randomBytes(32).toString('base64url');
 
     pendingAuth = { state, codeVerifier, createdAt: Date.now() };
 
@@ -120,7 +154,7 @@ router.get('/auth/status', (req, res) => {
   });
 });
 
-// ─── Clear auth (re-setup) ────────────────────────────────────────────
+// ─── Clear Tesla auth (re-setup) — already protected by requireAppAuth above
 router.post('/auth/logout', (req, res) => {
   const { clearCredentials } = require('../tesla/credentials');
   clearCredentials();
