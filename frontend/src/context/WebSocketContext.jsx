@@ -2,7 +2,12 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 
 const WebSocketContext = createContext(null);
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
+// Use wss:// when the page is loaded over HTTPS, ws:// otherwise
+function getWsUrl() {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}/ws`;
+}
 
 export function WebSocketProvider({ children }) {
   const [vehicleStatus, setVehicleStatus] = useState(null);
@@ -16,7 +21,7 @@ export function WebSocketProvider({ children }) {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => {
