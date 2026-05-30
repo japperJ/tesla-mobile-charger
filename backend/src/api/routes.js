@@ -25,12 +25,17 @@ const {
 // In-memory PKCE state store (single-user app — one pending auth at a time)
 let pendingAuth = null; // { state, codeVerifier, createdAt }
 
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'Strict',
-  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-};
+// Cookie options — secure only when the request arrived over HTTPS
+// (Cloudflare sets X-Forwarded-Proto: https; local HTTP access gets a plain cookie)
+function cookieOpts(req) {
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  return {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'Strict' : 'Lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  };
+}
 
 // ─── First-time account setup ─────────────────────────────────────────
 // POST /api/auth/setup { username, password }
@@ -73,7 +78,7 @@ router.post('/auth/login', async (req, res) => {
   }
   // No MFA — issue full session
   const token = issueToken();
-  res.cookie(TOKEN_COOKIE, token, COOKIE_OPTS);
+  res.cookie(TOKEN_COOKIE, token, cookieOpts(req));
   res.json({ ok: true, mfaRequired: false });
 });
 
@@ -89,7 +94,7 @@ router.post('/auth/mfa/verify', (req, res) => {
     return res.status(401).json({ error: 'Incorrect code. Try again.' });
   }
   const token = issueToken();
-  res.cookie(TOKEN_COOKIE, token, COOKIE_OPTS);
+  res.cookie(TOKEN_COOKIE, token, cookieOpts(req));
   res.json({ ok: true });
 });
 

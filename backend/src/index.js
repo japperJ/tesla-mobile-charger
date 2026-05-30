@@ -10,6 +10,9 @@ const routes = require('./api/routes');
 const app = express();
 const server = http.createServer(app);
 
+// Trust reverse proxy (nginx / Cloudflare) so req.secure and X-Forwarded-Proto work
+app.set('trust proxy', 1);
+
 const corsOrigin = process.env.CORS_ORIGIN;
 if (!corsOrigin) {
   console.warn('⚠️  WARNING: CORS_ORIGIN is not set — defaulting to same-origin only.');
