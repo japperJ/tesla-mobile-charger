@@ -7,6 +7,7 @@
 const { getDb } = require('../db/database');
 const { getConfig } = require('../db/config');
 const { resolveDepartureSettings } = require('./schedule-mode');
+const { shouldStartSession, shouldStopSession } = require('./session-timing');
 const { getVehicleId, startCharging, stopCharging, waitForOnline, setChargeLimit } = require('../tesla/client');
 const { hasCredentials } = require('../tesla/credentials');
 const { notify } = require('../notifications/ntfy');
@@ -43,12 +44,12 @@ async function runExecutor() {
   `).all(todayStr);
 
   for (const session of sessions) {
-    // Time to start — planned session whose start time just matched
-    if (session.status === 'planned' && timeStr === session.planned_start) {
+    // Start any planned session while its window is still active.
+    if (shouldStartSession(session, timeStr)) {
       await handleStart(session);
     }
-    // Time to stop — charging session whose end time just matched
-    if (session.status === 'charging' && timeStr === session.planned_end) {
+    // Stop charging once planned end has been reached.
+    if (shouldStopSession(session, timeStr)) {
       await handleStop(session);
     }
   }
